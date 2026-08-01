@@ -70,7 +70,9 @@ pub(super) fn compatibility_retry(error: &anyhow::Error) -> Option<LifecycleAtte
     if message.contains("unsupported mcp-protocol-version")
         || message.contains("unsupported protocol version")
         || message.contains("method not found")
+        || message.contains("method not supported")
         || message.contains("unknown method")
+        || (message.contains("-32601") && message.contains("server/discover"))
     {
         return Some(LifecycleAttempt::LegacyInitialize);
     }
@@ -80,9 +82,8 @@ pub(super) fn compatibility_retry(error: &anyhow::Error) -> Option<LifecycleAtte
         || message.contains("expect initialize request")
         || message.contains("expected initialize request")
         || message.contains("connection closed: discover response")
-        || (message.contains("server/discover")
-            && (message.contains("invalid params")
-                || message.contains("invalid request parameters")))
+        || message.contains("invalid params")
+        || message.contains("invalid request parameters")
     {
         return Some(LifecycleAttempt::LegacyInitialize);
     }
@@ -155,7 +156,10 @@ mod tests {
         for message in [
             "HTTP 400: Unsupported MCP-Protocol-Version: 2026-07-28",
             "server/discover failed: No valid session ID provided",
+            "JSON-RPC error: -32601: server/discover",
             "server/discover: Invalid request parameters",
+            "JSON-RPC error: -32602: Invalid request parameters(\"\")",
+            "JSON-RPC error: -32601: Method not supported",
             "HTTP 422 Unprocessable Entity: Unexpected message, expect initialize request",
             "connection closed: discover response",
         ] {
