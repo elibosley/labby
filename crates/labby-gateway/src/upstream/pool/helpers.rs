@@ -31,8 +31,9 @@ pub struct UpstreamCachedSummary {
     pub exposed_prompt_count: usize,
 }
 
-/// Per-upstream timeout for initial discovery (`list_tools`).
-pub(super) const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
+/// Per-upstream timeout for initial discovery (`list_tools`). Remote stdio
+/// bridges may cross multiple SSH hops and need longer than local processes.
+pub(super) const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 /// Per-service timeout for in-process peer registration and capability probing.
 pub(super) const IN_PROCESS_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
 /// Default cap for bulk discovery and concurrent lazy reprobes. Stdio upstreams
