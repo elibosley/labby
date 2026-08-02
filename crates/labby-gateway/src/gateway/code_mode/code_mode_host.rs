@@ -463,13 +463,13 @@ impl GatewayManager {
                         .first()
                         .and_then(|content| content.as_text())
                         .map(|content| content.text.as_str());
-                    let (kind, message, counts_as_failure) =
+                    let (kind, message, _counts_as_failure) =
                         code_mode_upstream_error_info(error_text);
-                    if counts_as_failure {
-                        pool.record_failure(upstream, message.clone()).await;
-                    } else {
-                        pool.record_success(upstream).await;
-                    }
+                    // A complete CallToolResponse, including is_error=true,
+                    // proves the MCP connection is alive. Tool/application
+                    // failure classification is caller-facing and must not
+                    // overwrite the pool's successful transport health.
+                    pool.record_success(upstream).await;
                     return Err(ToolError::Sdk {
                         sdk_kind: kind.to_string(),
                         message,
@@ -495,7 +495,9 @@ impl GatewayManager {
                 })
             }
             Some(Err(err)) => {
-                pool.record_failure(upstream, err.clone()).await;
+                // The pool owns transport-vs-MCP error classification and has
+                // already updated connection health. Re-recording here would
+                // turn valid application errors into false disconnects.
                 Err(ToolError::Sdk {
                     sdk_kind: "upstream_error".to_string(),
                     message: err,

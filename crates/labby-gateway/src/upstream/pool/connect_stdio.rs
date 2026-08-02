@@ -5,6 +5,9 @@
 //! (the `InProcessConnector` IoC seam) — this module no longer imports from
 //! `crate::mcp` (A-M6 fix).
 
+use std::collections::HashSet;
+use std::sync::{OnceLock, RwLock};
+
 use labby_runtime::gateway_config::UpstreamConfig;
 use rmcp::service::ClientServiceExt;
 use rmcp::{ClientHandler, RoleClient};
@@ -17,6 +20,28 @@ use super::lifecycle_compat::{LifecycleAttempt, compatibility_retry, log_fallbac
 use super::stdio_stderr::{
     StdioConnectError, StdioDiagnostics, forward_upstream_stderr, upstream_stderr_log_level,
 };
+
+static LEGACY_STDIO_LIFECYCLE: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
+
+fn stdio_lifecycle_key(command: &str, args: &[String], config: &UpstreamConfig) -> String {
+    format!("{}\u{0}{command}\u{0}{}", config.name, args.join("\u{0}"))
+}
+
+fn prefers_legacy_stdio_lifecycle(key: &str) -> bool {
+    LEGACY_STDIO_LIFECYCLE
+        .get_or_init(|| RwLock::new(HashSet::new()))
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains(key)
+}
+
+fn remember_legacy_stdio_lifecycle(key: String) {
+    LEGACY_STDIO_LIFECYCLE
+        .get_or_init(|| RwLock::new(HashSet::new()))
+        .write()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(key);
+}
 
 /// Connect to a stdio upstream MCP server (child process).
 ///
@@ -52,6 +77,13 @@ pub(super) async fn connect_stdio_upstream<H: ClientHandler + Clone>(
     let mut spawn_lock = super::spawn_lock::open(command, args);
     let _spawn_guard = super::spawn_lock::acquire(spawn_lock.as_mut()).await;
 
+    let lifecycle_key = stdio_lifecycle_key(command, args, config);
+    let initial_attempt = if prefers_legacy_stdio_lifecycle(&lifecycle_key) {
+        LifecycleAttempt::LegacyInitialize
+    } else {
+        LifecycleAttempt::Modern
+    };
+
     match connect_stdio_upstream_once(
         command,
         args,
@@ -59,14 +91,17 @@ pub(super) async fn connect_stdio_upstream<H: ClientHandler + Clone>(
         runtime_origin,
         runtime_owner,
         handler.clone(),
-        LifecycleAttempt::Modern,
+        initial_attempt,
     )
     .await
     {
         Ok(ok) => Ok(ok),
         Err(first_error) => {
             let lifecycle_error = anyhow::anyhow!(first_error.diagnostics_with_error());
-            if let Some(attempt) = compatibility_retry(&lifecycle_error) {
+            if initial_attempt == LifecycleAttempt::Modern
+                && let Some(attempt) = compatibility_retry(&lifecycle_error)
+            {
+                remember_legacy_stdio_lifecycle(lifecycle_key);
                 log_fallback(&config.name, "stdio", attempt, &lifecycle_error);
                 return connect_stdio_upstream_once(
                     command,
@@ -116,7 +151,7 @@ pub(super) async fn connect_stdio_upstream<H: ClientHandler + Clone>(
                 runtime_origin,
                 runtime_owner,
                 handler,
-                LifecycleAttempt::Modern,
+                initial_attempt,
             )
             .await
             {
@@ -327,4 +362,33 @@ async fn connect_stdio_upstream_once<H: ClientHandler>(
     );
 
     Ok((conn, tools))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::testsupport::named_test_upstream_config;
+    use super::*;
+
+    #[test]
+    fn remembers_legacy_lifecycle_for_exact_stdio_command() {
+        let config = named_test_upstream_config("legacy-stdio-cache-test");
+        let args = vec![
+            "nested-host".to_string(),
+            "mcp".to_string(),
+            "serve".to_string(),
+        ];
+        let key = stdio_lifecycle_key("ssh", &args, &config);
+
+        assert!(!prefers_legacy_stdio_lifecycle(&key));
+        remember_legacy_stdio_lifecycle(key.clone());
+        assert!(prefers_legacy_stdio_lifecycle(&key));
+
+        let other_args = vec![
+            "other-host".to_string(),
+            "mcp".to_string(),
+            "serve".to_string(),
+        ];
+        let other_key = stdio_lifecycle_key("ssh", &other_args, &config);
+        assert!(!prefers_legacy_stdio_lifecycle(&other_key));
+    }
 }
