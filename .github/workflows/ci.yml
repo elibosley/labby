@@ -540,9 +540,7 @@ jobs:
     # execute somewhere in CI instead of only ever being compiled. The fs
     # slice also executes its focused no-gateway proxy preflight regression.
     env:
-      # The gateway slice links the same large test harnesses as the full test
-      # graph, so keep its peak memory below the 8 GiB pool limit too.
-      CARGO_BUILD_JOBS: "1"
+      # lld only; see the `test` job for why CARGO_BUILD_JOBS must stay unset.
       RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
     strategy:
       fail-fast: false
@@ -655,7 +653,6 @@ jobs:
     runs-on: ci-pool-rust
     timeout-minutes: 60
     env:
-      CARGO_BUILD_JOBS: "1"
       RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
     needs: [changes, frontend-assets]
     if: ${{ needs.changes.outputs.rust_test == 'true' }}
@@ -728,9 +725,15 @@ jobs:
     runs-on: ci-pool-rust
     timeout-minutes: 60
     env:
-      # The all-features test graph links multiple large harnesses. Serializing
-      # Cargo builds and using lld keeps peak memory below the 8 GiB pool limit.
-      CARGO_BUILD_JOBS: "1"
+      # lld keeps the link step cheap. Do NOT reintroduce CARGO_BUILD_JOBS=1
+      # here: Cargo also passes it to every build script as NUM_JOBS, and
+      # aws-lc-sys compiles 414 C and 902 assembly sources through the cc
+      # crate. kache cannot cache any of that -- it wraps rustc, not cc -- so
+      # the throttle serialized ~1300 uncached source files on every run.
+      # Measured in a 7 GiB/no-swap cgroup matching the runner container:
+      # a full workspace build linking all 15 test harnesses peaks at 5.03 GiB,
+      # and `nextest run --workspace --all-features` peaks at 2.44 GiB. The
+      # limit was never the binding constraint; the serialization was.
       RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
     if: >-
       needs.changes.outputs.rust_test == 'true' &&
@@ -771,7 +774,6 @@ jobs:
     timeout-minutes: 60
     env:
       # Match the internal-PR test job resource profile on the shared pool.
-      CARGO_BUILD_JOBS: "1"
       RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
     needs: [changes, frontend-assets]
     if: >-
@@ -1138,7 +1140,6 @@ jobs:
     runs-on: ci-pool-rust
     timeout-minutes: 90
     env:
-      CARGO_BUILD_JOBS: "1"
       RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
     needs: [changes, frontend-assets]
     # The 90-minute instrumented re-run enforces a 15% floor; keep it off the

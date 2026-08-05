@@ -435,22 +435,33 @@ fn ci_workflow_uses_changed_path_classifier_and_stable_gate() {
         "the fs slice must run the proxy preflight integration binary without gateway"
     );
 
-    for (job, next_job) in [
-        ("feature-slices", "extracted-crate-slices"),
-        ("test", "test-fork"),
-        ("test-fork", "test-windows"),
+    // Read the job env structurally: the rationale comments below mention
+    // CARGO_BUILD_JOBS by name, so a substring check would match the very
+    // explanation of why it is absent.
+    let parsed = ci_workflow_yaml(&workflow);
+    for job in [
+        "feature-slices",
+        "mcp-regressions",
+        "test",
+        "test-fork",
+        "rust-coverage",
     ] {
-        let section = workflow
-            .split(&format!("  {job}:\n"))
-            .nth(1)
-            .and_then(|body| body.split(&format!("\n  {next_job}:")).next())
-            .expect("memory-constrained Rust job body");
+        let env = &parsed["jobs"][job]["env"];
+        // Cargo passes CARGO_BUILD_JOBS to build scripts as NUM_JOBS, and
+        // aws-lc-sys compiles 414 C and 902 assembly sources through the cc
+        // crate — work kache cannot cache, because it wraps rustc, not cc.
+        // Setting it to 1 serialized ~1300 uncached sources on every run to
+        // respect a memory limit that measurement shows is never approached:
+        // a full workspace build linking all 15 test harnesses peaks at
+        // 5.03 GiB of the runner's 7 GiB, and the nextest run peaks at
+        // 2.44 GiB.
         assert!(
-            section.contains("CARGO_BUILD_JOBS: \"1\""),
-            "{job} must serialize Cargo builds below the shared pool memory limit"
+            env["CARGO_BUILD_JOBS"].is_null(),
+            "{job} must not throttle Cargo build jobs; that also serializes the aws-lc-sys C build, which no cache can absorb"
         );
-        assert!(
-            section.contains("RUSTFLAGS: \"-C linker=clang -C link-arg=-fuse-ld=lld\""),
+        assert_eq!(
+            env["RUSTFLAGS"].as_str(),
+            Some("-C linker=clang -C link-arg=-fuse-ld=lld"),
             "{job} must use the lower-memory lld linker"
         );
     }
