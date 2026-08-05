@@ -57,6 +57,20 @@ identifiers were removed. Commit links remain the authoritative historical recor
 
 - Relicense Dinglebear-owned original work under AGPL-3.0-only and document separate commercial licensing; third-party material retains its original terms.
 
+## [1.10.0](https://github.com/dinglebear-ai/labby/compare/v1.9.0...v1.10.0) (2026-08-05)
+
+
+### Added
+
+* **auth:** add shared Google credential broker ([#356](https://github.com/dinglebear-ai/labby/issues/356)) ([cb6d404](https://github.com/dinglebear-ai/labby/commit/cb6d4044a0ac6839daf40b25d4ad9dc8fbb54f72))
+
+
+### Fixed
+
+* **brand:** verify the fetched font and stop swallowing render failures ([#361](https://github.com/dinglebear-ai/labby/issues/361)) ([7c8ea81](https://github.com/dinglebear-ai/labby/commit/7c8ea81262efa70e32eb60d893c80de66d2e90c5))
+* **npm:** resync the launcher README with the repo README ([#359](https://github.com/dinglebear-ai/labby/issues/359)) ([1324488](https://github.com/dinglebear-ai/labby/commit/132448802ebe5e1e0bbf85c39bf646acae52c912))
+* **ui:** guard code mode inspector against trace re-delivery races ([#342](https://github.com/dinglebear-ai/labby/issues/342)) ([bf31f40](https://github.com/dinglebear-ai/labby/commit/bf31f4019b1bde15ed14a9e970f72b7adadecc86))
+
 ## [1.9.0](https://github.com/dinglebear-ai/labby/compare/v1.8.9...v1.9.0) (2026-08-05)
 
 
