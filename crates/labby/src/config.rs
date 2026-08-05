@@ -3360,7 +3360,7 @@ backend_url = "http://10.0.0.2:3100/mcp"
 [[protected_mcp_routes]]
 name = "bad"
 public_host = "mcp.example.com"
-public_path = "/callback/dookie"
+public_path = "/callback/devhost"
 backend_url = "http://10.0.0.2:3100/mcp"
 "#;
 
