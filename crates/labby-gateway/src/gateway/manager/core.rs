@@ -634,6 +634,7 @@ impl GatewayManager {
         &self,
         request_timeout: std::time::Duration,
         relay_timeout: std::time::Duration,
+        auto_reconnect: bool,
     ) -> UpstreamPool {
         let pool = match &self.oauth_client_cache {
             Some(cache) => UpstreamPool::new().with_oauth_client_cache(cache.clone()),
@@ -641,6 +642,7 @@ impl GatewayManager {
         }
         .with_request_timeout(request_timeout)
         .with_relay_timeout(relay_timeout)
+        .with_auto_reconnect(auto_reconnect)
         .with_usage_store(self.usage_store.clone())
         .with_header_recovery_metrics_store(self.header_recovery_metrics_store.clone());
         // Propagate the in-process connector so pools built on reload, lazy
